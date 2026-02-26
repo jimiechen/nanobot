@@ -40,6 +40,9 @@ class FeishuConfig(Base):
     encrypt_key: str = ""  # Encrypt Key for event subscription (optional)
     verification_token: str = ""  # Verification Token for event subscription (optional)
     allow_from: list[str] = Field(default_factory=list)  # Allowed user open_ids
+    allow_groups: list[str] = Field(default_factory=list)  # Allowed group chat_ids (empty = allow all)
+    require_mention: bool = False  # Only respond when mentioned in groups
+    bot_name: str = ""  # Bot name for mention detection (e.g., "winbot")
 
 
 class DingTalkConfig(Base):

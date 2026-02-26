@@ -647,6 +647,40 @@ class FeishuChannel(BaseChannel):
         if self._loop and self._loop.is_running():
             asyncio.run_coroutine_threadsafe(self._on_message(data), self._loop)
     
+    def _is_group_allowed(self, chat_id: str) -> bool:
+        """Check if group chat is allowed."""
+        allow_groups = getattr(self.config, "allow_groups", [])
+        if not allow_groups:
+            return True
+        return chat_id in allow_groups
+
+    def _is_mentioned(self, content: str, content_json: dict, msg_type: str) -> bool:
+        """Check if bot is mentioned in the message."""
+        bot_name = getattr(self.config, "bot_name", "")
+        
+        # Check @bot_name in text content
+        if bot_name and f"@{bot_name}" in content:
+            return True
+        
+        # Check mention tags in post messages
+        if msg_type == "post" and content_json:
+            for lang_key in ("zh_cn", "en_us", "ja_jp"):
+                lang_content = content_json.get(lang_key, {})
+                if not isinstance(lang_content, dict):
+                    continue
+                content_blocks = lang_content.get("content", [])
+                for block in content_blocks:
+                    if not isinstance(block, list):
+                        continue
+                    for element in block:
+                        if isinstance(element, dict) and element.get("tag") == "at":
+                            # Check if mention matches bot name
+                            mentioned_name = element.get("user_name", "")
+                            if bot_name and mentioned_name == bot_name:
+                                return True
+        
+        return False
+
     async def _on_message(self, data: "P2ImMessageReceiveV1") -> None:
         """Handle incoming message from Feishu."""
         try:
@@ -672,6 +706,11 @@ class FeishuChannel(BaseChannel):
             chat_id = message.chat_id
             chat_type = message.chat_type
             msg_type = message.message_type
+
+            # Check group allowlist for group chats
+            if chat_type == "group" and not self._is_group_allowed(chat_id):
+                logger.debug("Group {} not in allow_groups, ignoring message", chat_id)
+                return
 
             # Add reaction
             await self._add_reaction(message_id, "THUMBSUP")
@@ -714,6 +753,13 @@ class FeishuChannel(BaseChannel):
 
             if not content and not media_paths:
                 return
+
+            # Check mention requirement for group chats
+            require_mention = getattr(self.config, "require_mention", False)
+            if chat_type == "group" and require_mention:
+                if not self._is_mentioned(content, content_json, msg_type):
+                    logger.debug("Bot not mentioned in group {}, ignoring message", chat_id)
+                    return
 
             # Forward to message bus
             reply_to = chat_id if chat_type == "group" else sender_id
