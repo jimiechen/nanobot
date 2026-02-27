@@ -99,6 +99,14 @@ cd nanobot
 pip install -e .
 ```
 
+**Install from private fork** (for team collaboration)
+
+```bash
+git clone https://github.com/jimiechen/nanobot.git
+cd nanobot
+pip install -e .
+```
+
 **Install with [uv](https://github.com/astral-sh/uv)** (stable, fast)
 
 ```bash
@@ -1045,6 +1053,74 @@ nanobot/
 ├── config/         # ⚙️ Configuration
 └── cli/            # 🖥️ Commands
 ```
+
+## 🔄 Team Collaboration Guide
+
+### 如何更新 nanobot-src (How to Update)
+
+如果你是从私有仓库克隆的，可以通过以下步骤同步上游更新：
+
+**1. 添加上游仓库**
+
+```bash
+cd nanobot
+git remote add upstream https://github.com/HKUDS/nanobot.git
+```
+
+**2. 获取上游更新**
+
+```bash
+git fetch upstream
+```
+
+**3. 合并更新到本地主分支**
+
+```bash
+git checkout main
+git merge upstream/main
+```
+
+**4. 解决冲突（如有）并推送**
+
+```bash
+# 解决冲突后
+git add .
+git commit -m "Merge upstream updates"
+git push origin main
+```
+
+### 配置私有仓库 (Private Repository Setup)
+
+**GitHub Token 配置**
+
+由于 GitHub 已停止支持密码认证，需要使用 Personal Access Token：
+
+1. 访问 [GitHub Settings → Developer settings → Personal access tokens](https://github.com/settings/tokens)
+2. 生成新的 Token（勾选 `repo` 权限）
+3. 在 Windows 上使用 Git Credential Manager 存储凭据：
+
+```bash
+git config --global credential.helper manager
+git push origin main
+# 首次推送时会弹出窗口要求输入用户名和 Token
+```
+
+**快速同步脚本**
+
+创建 `sync-upstream.sh` 脚本方便日常同步：
+
+```bash
+#!/bin/bash
+echo "Fetching upstream updates..."
+git fetch upstream
+echo "Merging upstream/main into current branch..."
+git merge upstream/main
+echo "Pushing to origin..."
+git push origin main
+echo "Sync complete!"
+```
+
+---
 
 ## 🤝 Contribute & Roadmap
 
