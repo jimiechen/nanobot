@@ -246,9 +246,10 @@ def _make_provider(config: Config):
 def gateway(
     port: int = typer.Option(18790, "--port", "-p", help="Gateway port"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
+    workspace: str = typer.Option(None, "--workspace", "-w", help="Workspace directory for multi-bot configuration"),
 ):
     """Start the nanobot gateway."""
-    from nanobot.config.loader import load_config, get_data_dir
+    from nanobot.config.loader import load_config, get_data_dir, get_config_path
     from nanobot.bus.queue import MessageBus
     from nanobot.agent.loop import AgentLoop
     from nanobot.channels.manager import ChannelManager
@@ -256,6 +257,13 @@ def gateway(
     from nanobot.cron.service import CronService
     from nanobot.cron.types import CronJob
     from nanobot.heartbeat.service import HeartbeatService
+    from nanobot.utils.helpers import set_workspace
+    
+    # Set workspace if provided (for multi-bot configuration)
+    if workspace:
+        ws_path = Path(workspace).expanduser().resolve()
+        set_workspace(ws_path)
+        console.print(f"[dim]Using workspace: {ws_path}[/dim]")
     
     if verbose:
         import logging
@@ -263,7 +271,12 @@ def gateway(
     
     console.print(f"{__logo__} Starting nanobot gateway on port {port}...")
     
-    config = load_config()
+    # Load config from workspace if provided
+    if workspace:
+        config_path = Path(workspace) / "config.json"
+        config = load_config(config_path if config_path.exists() else None)
+    else:
+        config = load_config()
     sync_workspace_templates(config.workspace_path)
     bus = MessageBus()
     provider = _make_provider(config)

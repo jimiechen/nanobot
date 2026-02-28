@@ -730,10 +730,7 @@ class FeishuChannel(BaseChannel):
                 logger.debug("Group {} not in allow_groups, ignoring message", chat_id)
                 return
 
-            # Add reaction
-            await self._add_reaction(message_id, self.config.react_emoji)
-
-            # Parse content
+            # Parse content first (needed for mention check)
             content_parts = []
             media_paths = []
 
@@ -772,7 +769,19 @@ class FeishuChannel(BaseChannel):
                 if text:
                     content_parts.append(text)
 
-            else:
+            # Check if bot is mentioned when require_mention is enabled
+            full_content = "\n".join(content_parts)
+            require_mention = getattr(self.config, "require_mention", False)
+            if require_mention and chat_type == "group":
+                if not self._is_mentioned(full_content, content_json, msg_type):
+                    logger.debug("Bot not mentioned in group chat, ignoring message (require_mention=True)")
+                    return
+
+            # Add reaction
+            await self._add_reaction(message_id, self.config.react_emoji)
+
+            # Handle unknown message types
+            if not content_parts:
                 content_parts.append(MSG_TYPE_MAP.get(msg_type, f"[{msg_type}]"))
 
             content = "\n".join(content_parts) if content_parts else ""
