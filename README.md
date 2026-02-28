@@ -166,6 +166,61 @@ nanobot agent
 
 That's it! You have a working AI assistant in 2 minutes.
 
+## 🤖 Multi-Bot Workspace (Advanced)
+
+Run multiple nanobot instances with independent configurations using the `--workspace` parameter.
+
+**Use case**: Deploy different bots for different teams (dev, product, test) on the same machine.
+
+**1. Create workspace directories**
+
+```bash
+mkdir -p ~/nanobot-workspaces/{bot_dev,bot_pm,bot_test}
+```
+
+**2. Create config for each bot**
+
+Each workspace needs its own `config.json`:
+
+```bash
+# ~/nanobot-workspaces/bot_dev/config.json
+{
+  "providers": { ... },
+  "agents": { ... },
+  "channels": {
+    "feishu": {
+      "enabled": true,
+      "appId": "cli_xxx",
+      "appSecret": "xxx",
+      "requireMention": true,
+      "botName": "dev-bot"
+    }
+  }
+}
+```
+
+**3. Start bots with workspace parameter**
+
+```bash
+# Terminal 1 - Dev bot
+nanobot gateway --workspace ~/nanobot-workspaces/bot_dev
+
+# Terminal 2 - Product bot  
+nanobot gateway --workspace ~/nanobot-workspaces/bot_pm
+
+# Terminal 3 - Test bot
+nanobot gateway --workspace ~/nanobot-workspaces/bot_test
+```
+
+Each bot runs independently with:
+- Separate configuration
+- Separate memory and sessions
+- Separate cron jobs
+- Can use different LLM providers
+
+> [!TIP]
+> Use `requireMention: true` and unique `botName` for each bot so they don't conflict in the same group chat.
+
 ## 💬 Chat Apps
 
 Connect nanobot to your favorite chat platform.
@@ -462,6 +517,26 @@ nanobot gateway
 
 > [!TIP]
 > Feishu uses WebSocket to receive messages — no webhook or public IP needed!
+
+**4. Require Mention (Optional)**
+
+To make the bot only respond when mentioned in group chats:
+
+```json
+{
+  "channels": {
+    "feishu": {
+      "enabled": true,
+      "appId": "cli_xxx",
+      "appSecret": "xxx",
+      "requireMention": true,
+      "botName": "your-bot-name"
+    }
+  }
+}
+```
+
+When `requireMention: true`, the bot will only respond in group chats when someone @mentions it by name.
 
 </details>
 
