@@ -283,7 +283,11 @@ def gateway(
     session_manager = SessionManager(config.workspace_path)
     
     # Create cron service first (callback set after agent creation)
-    cron_store_path = get_data_dir() / "cron" / "jobs.json"
+    # Use workspace path for cron jobs if workspace is set
+    if workspace:
+        cron_store_path = Path(workspace) / "cron" / "jobs.json"
+    else:
+        cron_store_path = get_data_dir() / "cron" / "jobs.json"
     cron = CronService(cron_store_path)
     
     # Create agent with cron service
