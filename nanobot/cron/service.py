@@ -10,6 +10,7 @@ from typing import Any, Callable, Coroutine
 
 from loguru import logger
 
+from nanobot.cron.skill_executor import SkillExecutor
 from nanobot.cron.types import CronJob, CronJobState, CronPayload, CronSchedule, CronStore
 
 
@@ -61,13 +62,15 @@ def _validate_schedule_for_add(schedule: CronSchedule) -> None:
 
 class CronService:
     """Service for managing and executing scheduled jobs."""
-    
+
     def __init__(
         self,
         store_path: Path,
+        skill_executor: SkillExecutor | None = None,
         on_job: Callable[[CronJob], Coroutine[Any, Any, str | None]] | None = None
     ):
         self.store_path = store_path
+        self.skill_executor = skill_executor  # Skill executor for direct script execution
         self.on_job = on_job  # Callback to execute job, returns response text
         self._store: CronStore | None = None
         self._timer_task: asyncio.Task | None = None
@@ -100,6 +103,9 @@ class CronService:
                             deliver=j["payload"].get("deliver", False),
                             channel=j["payload"].get("channel"),
                             to=j["payload"].get("to"),
+                            skill=j["payload"].get("skill"),
+                            script=j["payload"].get("script"),
+                            args=j["payload"].get("args", []),
                         ),
                         state=CronJobState(
                             next_run_at_ms=j.get("state", {}).get("nextRunAtMs"),
@@ -147,6 +153,9 @@ class CronService:
                         "deliver": j.payload.deliver,
                         "channel": j.payload.channel,
                         "to": j.payload.to,
+                        "skill": j.payload.skill,
+                        "script": j.payload.script,
+                        "args": j.payload.args,
                     },
                     "state": {
                         "nextRunAtMs": j.state.next_run_at_ms,
@@ -237,24 +246,43 @@ class CronService:
         """Execute a single job."""
         start_ms = _now_ms()
         logger.info("Cron: executing job '{}' ({})", job.name, job.id)
-        
+
         try:
             response = None
-            if self.on_job:
+
+            # If skill_exec type and skill_executor is configured, execute directly
+            if job.payload.kind == "skill_exec" and self.skill_executor and job.payload.skill:
+                result = await self.skill_executor.execute(
+                    skill_name=job.payload.skill,
+                    script=job.payload.script or "scripts/main.py",
+                    args=job.payload.args
+                )
+
+                response = result["stdout"] if result["success"] else result["stderr"]
+
+                job.state.last_status = "ok" if result["success"] else "error"
+                job.state.last_error = None if result["success"] else result["stderr"]
+
+                if result["success"]:
+                    logger.info("Cron: job '{}' completed (skill_exec)", job.name)
+                else:
+                    logger.error("Cron: job '{}' failed (skill_exec): {}", job.name, result["stderr"])
+
+            elif self.on_job:
+                # Original logic, execute through Agent
                 response = await self.on_job(job)
-            
-            job.state.last_status = "ok"
-            job.state.last_error = None
-            logger.info("Cron: job '{}' completed", job.name)
-            
+                job.state.last_status = "ok"
+                job.state.last_error = None
+                logger.info("Cron: job '{}' completed", job.name)
+
         except Exception as e:
             job.state.last_status = "error"
             job.state.last_error = str(e)
             logger.error("Cron: job '{}' failed: {}", job.name, e)
-        
+
         job.state.last_run_at_ms = start_ms
         job.updated_at_ms = _now_ms()
-        
+
         # Handle one-shot jobs
         if job.schedule.kind == "at":
             if job.delete_after_run:

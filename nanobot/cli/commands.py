@@ -255,6 +255,7 @@ def gateway(
     from nanobot.channels.manager import ChannelManager
     from nanobot.session.manager import SessionManager
     from nanobot.cron.service import CronService
+    from nanobot.cron.skill_executor import SkillExecutor
     from nanobot.cron.types import CronJob
     from nanobot.heartbeat.service import HeartbeatService
     from nanobot.utils.helpers import set_workspace
@@ -282,13 +283,16 @@ def gateway(
     provider = _make_provider(config)
     session_manager = SessionManager(config.workspace_path)
     
+    # Create skill executor for direct skill execution
+    skill_executor = SkillExecutor(config.workspace_path)
+
     # Create cron service first (callback set after agent creation)
     # Use workspace path for cron jobs if workspace is set
     if workspace:
         cron_store_path = Path(workspace) / "cron" / "jobs.json"
     else:
         cron_store_path = get_data_dir() / "cron" / "jobs.json"
-    cron = CronService(cron_store_path)
+    cron = CronService(cron_store_path, skill_executor=skill_executor)
     
     # Create agent with cron service
     agent = AgentLoop(
@@ -311,7 +315,11 @@ def gateway(
     
     # Set cron callback (needs agent)
     async def on_cron_job(job: CronJob) -> str | None:
-        """Execute a cron job through the agent."""
+        """Execute a cron job through the agent (for non-skill_exec jobs)."""
+        # skill_exec jobs are handled directly by CronService using SkillExecutor
+        if job.payload.kind == "skill_exec":
+            return None  # Already handled by CronService
+
         response = await agent.process_direct(
             job.payload.message,
             session_key=f"cron:{job.id}",
