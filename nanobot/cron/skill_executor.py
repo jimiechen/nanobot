@@ -16,15 +16,17 @@ class SkillExecutor:
         # skills_root is the root directory containing skills/nanobot
         # If not provided, assume skills are in the parent of workspace
         if skills_root:
-            self.skills_dir = skills_root / "skills" / "nanobot"
+            self.skills_dir = (skills_root / "skills" / "nanobot").resolve()
         else:
             # Try to find skills directory - check parent of workspace first
-            parent_skills = workspace.parent / "skills" / "nanobot"
+            parent_skills = (workspace.parent / "skills" / "nanobot").resolve()
             if parent_skills.exists():
                 self.skills_dir = parent_skills
             else:
                 # Fallback to workspace/skills
-                self.skills_dir = workspace / "skills" / "nanobot"
+                self.skills_dir = (workspace / "skills" / "nanobot").resolve()
+        
+        logger.info("SkillExecutor initialized with skills_dir: {}", self.skills_dir)
 
     async def execute(
         self,
