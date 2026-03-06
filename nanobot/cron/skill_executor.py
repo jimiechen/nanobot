@@ -11,9 +11,20 @@ from loguru import logger
 class SkillExecutor:
     """直接执行 skill 脚本，不经过 LLM"""
 
-    def __init__(self, workspace: Path):
+    def __init__(self, workspace: Path, skills_root: Path | None = None):
         self.workspace = workspace
-        self.skills_dir = workspace / "skills" / "nanobot"
+        # skills_root is the root directory containing skills/nanobot
+        # If not provided, assume skills are in the parent of workspace
+        if skills_root:
+            self.skills_dir = skills_root / "skills" / "nanobot"
+        else:
+            # Try to find skills directory - check parent of workspace first
+            parent_skills = workspace.parent / "skills" / "nanobot"
+            if parent_skills.exists():
+                self.skills_dir = parent_skills
+            else:
+                # Fallback to workspace/skills
+                self.skills_dir = workspace / "skills" / "nanobot"
 
     async def execute(
         self,
