@@ -292,7 +292,7 @@ def gateway(
         cron_store_path = Path(workspace) / "cron" / "jobs.json"
     else:
         cron_store_path = get_data_dir() / "cron" / "jobs.json"
-    cron = CronService(cron_store_path, skill_executor=skill_executor)
+    cron = CronService(cron_store_path, skill_executor=skill_executor, bus=bus)
     
     # Create agent with cron service
     agent = AgentLoop(

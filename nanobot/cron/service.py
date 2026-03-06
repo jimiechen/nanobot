@@ -67,11 +67,13 @@ class CronService:
         self,
         store_path: Path,
         skill_executor: SkillExecutor | None = None,
-        on_job: Callable[[CronJob], Coroutine[Any, Any, str | None]] | None = None
+        on_job: Callable[[CronJob], Coroutine[Any, Any, str | None]] | None = None,
+        bus: Any | None = None,
     ):
         self.store_path = store_path
         self.skill_executor = skill_executor  # Skill executor for direct script execution
         self.on_job = on_job  # Callback to execute job, returns response text
+        self.bus = bus  # Message bus for sending notifications
         self._store: CronStore | None = None
         self._timer_task: asyncio.Task | None = None
         self._running = False
@@ -265,8 +267,14 @@ class CronService:
 
                 if result["success"]:
                     logger.info("Cron: job '{}' completed (skill_exec)", job.name)
+                    # Send notification to Feishu if configured
+                    if self.bus and job.payload.deliver and job.payload.to:
+                        await self._send_notification(job, result)
                 else:
                     logger.error("Cron: job '{}' failed (skill_exec): {}", job.name, result["stderr"])
+                    # Send error notification to Feishu if configured
+                    if self.bus and job.payload.deliver and job.payload.to:
+                        await self._send_notification(job, result, is_error=True)
 
             elif self.on_job:
                 # Original logic, execute through Agent
@@ -293,6 +301,32 @@ class CronService:
         else:
             # Compute next run
             job.state.next_run_at_ms = _compute_next_run(job.schedule, _now_ms())
+
+    async def _send_notification(self, job: CronJob, result: dict, is_error: bool = False) -> None:
+        """Send execution result notification to Feishu."""
+        if not self.bus:
+            return
+
+        try:
+            from nanobot.bus.events import OutboundMessage
+
+            if is_error:
+                content = f"❌ 定时任务执行失败\n\n任务: {job.name}\n错误: {result.get('stderr', 'Unknown error')}"
+            else:
+                stdout = result.get('stdout', '')
+                # Truncate if too long
+                if len(stdout) > 500:
+                    stdout = stdout[:500] + "\n... (truncated)"
+                content = f"✅ 定时任务执行成功\n\n任务: {job.name}\n\n{stdout}"
+
+            await self.bus.publish_outbound(OutboundMessage(
+                channel=job.payload.channel or "feishu",
+                chat_id=job.payload.to,
+                content=content
+            ))
+            logger.info("Cron: notification sent for job '{}'", job.name)
+        except Exception as e:
+            logger.error("Cron: failed to send notification for job '{}': {}", job.name, e)
     
     # ========== Public API ==========
     
