@@ -284,7 +284,9 @@ def gateway(
     session_manager = SessionManager(config.workspace_path)
     
     # Create skill executor for direct skill execution
-    skill_executor = SkillExecutor(config.workspace_path)
+    # Skills are located in the parent directory of the workspace (agentsTeam/skills/)
+    skills_root = config.workspace_path.parent
+    skill_executor = SkillExecutor(config.workspace_path, skills_root=skills_root)
 
     # Create cron service first (callback set after agent creation)
     # Use workspace path for cron jobs if workspace is set
