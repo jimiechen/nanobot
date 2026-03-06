@@ -284,8 +284,10 @@ def gateway(
     session_manager = SessionManager(config.workspace_path)
     
     # Create skill executor for direct skill execution
-    # Skills are located in the parent directory of the workspace (agentsTeam/skills/)
-    skills_root = config.workspace_path.parent
+    # Skills are located in d:\agentsTeam\skills\ (two levels up from workspace)
+    # workspace: d:\agentsTeam\nanobot-workspaces\winbot
+    # skills_root: d:\agentsTeam
+    skills_root = config.workspace_path.parent.parent
     skill_executor = SkillExecutor(config.workspace_path, skills_root=skills_root)
 
     # Create cron service first (callback set after agent creation)
