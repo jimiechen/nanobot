@@ -309,15 +309,40 @@ class CronService:
 
         try:
             from nanobot.bus.events import OutboundMessage
+            from datetime import datetime
+
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M")
 
             if is_error:
-                content = f"❌ 定时任务执行失败\n\n任务: {job.name}\n错误: {result.get('stderr', 'Unknown error')}"
+                stderr = result.get('stderr', 'Unknown error')
+                # Truncate error message if too long
+                if len(stderr) > 300:
+                    stderr = stderr[:300] + "\n... (已截断)"
+                
+                content = f"""❌ 定时任务执行失败
+
+📋 **任务**：{job.name}
+⏰ **时间**：{current_time}
+🔴 **状态**：失败
+
+💥 **错误信息**：
+```
+{stderr}
+```
+
+🔧 **建议**：
+1. 检查相关服务是否正常（通达信/天龙博弈）
+2. 查看详细日志排查问题
+3. 手动执行或等待下次定时任务"""
             else:
                 stdout = result.get('stdout', '')
-                # Truncate if too long
-                if len(stdout) > 500:
-                    stdout = stdout[:500] + "\n... (truncated)"
-                content = f"✅ 定时任务执行成功\n\n任务: {job.name}\n\n{stdout}"
+                # Format output based on job type
+                if '选股' in job.name or '股票' in job.name:
+                    content = self._format_stock_notification(job, stdout, current_time)
+                elif '任务' in job.name:
+                    content = self._format_task_notification(job, stdout, current_time)
+                else:
+                    content = self._format_default_notification(job, stdout, current_time)
 
             await self.bus.publish_outbound(OutboundMessage(
                 channel=job.payload.channel or "feishu",
@@ -327,6 +352,86 @@ class CronService:
             logger.info("Cron: notification sent for job '{}'", job.name)
         except Exception as e:
             logger.error("Cron: failed to send notification for job '{}': {}", job.name, e)
+
+    def _format_stock_notification(self, job: CronJob, stdout: str, current_time: str) -> str:
+        """Format stock-related job notification."""
+        # Extract stock count if available
+        stock_count = "N"
+        if "发现" in stdout and "只股票" in stdout:
+            try:
+                import re
+                match = re.search(r'发现\s*(\d+)\s*只', stdout)
+                if match:
+                    stock_count = match.group(1)
+            except:
+                pass
+        
+        # Truncate if too long
+        if len(stdout) > 400:
+            stdout = stdout[:400] + "\n... (已截断，查看完整数据请访问多维表格)"
+        
+        return f"""📈 定时任务执行完成
+
+📋 **任务**：{job.name}
+⏰ **时间**：{current_time}
+✅ **状态**：成功
+
+📊 **执行结果**：
+{stdout}
+
+📎 **数据已同步到飞书多维表格**"""
+
+    def _format_task_notification(self, job: CronJob, stdout: str, current_time: str) -> str:
+        """Format task-related job notification."""
+        # Parse task counts
+        completed = pending = overdue = 0
+        try:
+            import re
+            completed_match = re.search(r'已完成[:：]\s*(\d+)', stdout)
+            pending_match = re.search(r'进行中[:：]\s*(\d+)', stdout)
+            overdue_match = re.search(r'已逾期[:：]\s*(\d+)', stdout)
+            
+            if completed_match:
+                completed = int(completed_match.group(1))
+            if pending_match:
+                pending = int(pending_match.group(1))
+            if overdue_match:
+                overdue = int(overdue_match.group(1))
+        except:
+            pass
+        
+        # Build summary
+        summary = f"✅ 已完成：{completed}个"
+        if pending > 0:
+            summary += f" | ⏳ 进行中：{pending}个"
+        if overdue > 0:
+            summary += f" | ⚠️ 已逾期：{overdue}个"
+        
+        return f"""📋 定时任务执行完成
+
+📋 **任务**：{job.name}
+⏰ **时间**：{current_time}
+✅ **状态**：成功
+
+📊 **任务摘要**：
+{summary}
+
+📎 **详细信息**：[查看飞书任务看板](https://www.feishu.cn)"""
+
+    def _format_default_notification(self, job: CronJob, stdout: str, current_time: str) -> str:
+        """Format default job notification."""
+        # Truncate if too long
+        if len(stdout) > 400:
+            stdout = stdout[:400] + "\n... (已截断)"
+        
+        return f"""⏰ 定时任务执行完成
+
+📋 **任务**：{job.name}
+⏰ **时间**：{current_time}
+✅ **状态**：成功
+
+📊 **执行结果**：
+{stdout}"""
     
     # ========== Public API ==========
     
